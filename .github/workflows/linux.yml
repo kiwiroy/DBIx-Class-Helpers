@@ -1,0 +1,91 @@
+name: linux
+
+on:
+  push:
+    branches: "*"
+  pull_request:
+    branches: "*"
+
+jobs:
+  linux:
+
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TESTING: 1
+      AUTOMATED_TESTING: 1
+      AUTHOR_TESTING: 1
+      HARNESS_OPTIONS: 'c'
+      HARNESS_TIMER: 1
+    strategy:
+      matrix:
+        perl-version:
+          # - "5.8"
+          # - "5.10"
+          # - "5.12"
+          # - "5.14"
+          # - "5.16"
+          # - "5.18"
+          # - "5.20"
+          # - "5.22"
+          # - "5.24"
+          # - "5.26"
+          # - "5.28"
+          # - "5.30"
+          - "5.32"
+          - "5.34"
+        include:
+          - coverage: 1
+            perl-version: "5.32"
+    container:
+      image: perl:${{ matrix.perl-version }}
+    services:
+      postgres:
+        image: postgres:10.6
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dbii_test
+          POSTGRES_INITDB_ARGS: --auth-host=md5
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mysql:
+        image: mariadb:latest
+        ports:
+          - 33306:3306
+        env:
+          MYSQL_DATABASE: dbii_test
+          MYSQL_USER: root
+          MYSQL_PASSWORD: password
+          MYSQL_ROOT_PASSWORD: password
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+    steps:
+       - uses: actions/checkout@v2
+       - name: Install dependencies
+         run: |
+            cpanm --quiet --notest SQL::Translator DBD::Pg DBD::mysql DateTime::Format::Pg DateTime::Format::MySQL
+            cpanm --quiet --notest --installdeps .
+       - name: Install Coveralls reporting dependencies
+         run: cpanm --quiet --notest Devel::Cover::Report::Coveralls
+         if: ${{ matrix.coverage == 1 }}
+       - name: Generate TestSchema DDL
+         run: perl -Ilib -It/lib -MTestSchema -e'TestSchema->generate_ddl'
+       - name: Run tests
+         run: |
+            if [ "x$COVERAGE" == "x1" ]; then export PERL5OPT=-MDevel::Cover=-coverage,statement,branch,condition,path,subroutine; fi
+            prove -lrsv t
+         env:
+             DBIITEST_MYSQL_DSN: 'dbi:mysql:database=dbii_test;host=mysql;port=33306'
+             DBIITEST_MYSQL_USER: root
+             DBIITEST_PG_DSN: 'dbi:Pg:database=dbii_test;host=postgres'
+             DBIITEST_PG_USER: postgres
+             DBIITEST_PG_PASSWORD: postgres
+             COVERAGE: ${{ matrix.coverage }}
+       - name: Report coverage data to Coveralls
+         run: cover -report coveralls
+         if: ${{ matrix.coverage == 1 }}
