@@ -18,7 +18,7 @@ sub correlate {
 
    my $source = $rs->result_source;
 
-   $recent_dbic = $source->can('resolve_relationship_condition') ? 1 : 0
+   $recent_dbic = $source->can('_resolve_relationship_condition') ? 1 : 0
       if not defined $recent_dbic;
 
    return $source->related_source($rel)->resultset
@@ -26,7 +26,7 @@ sub correlate {
 
          ($recent_dbic
 
-            ? $source->resolve_relationship_condition(
+            ? $source->_resolve_relationship_condition(
                rel_name => $rel,
                foreign_alias => "${rel}_alias",
                self_alias => $rs->current_source_alias,
